@@ -1,77 +1,131 @@
+// Log that extension is loaded
 console.log("Dovetail search extension loaded");
 
-// Function to analyze page structure
-function analyzePageStructure() {
-    console.log("Analyzing page structure...");
-    
-    // Look for iframes
-    const iframes = Array.from(document.getElementsByTagName('iframe'));
-    console.log("Iframes found:", iframes.map(f => ({src: f.src, id: f.id})));
-    
-    // Look for all elements with data attributes
-    const dataElements = Array.from(document.querySelectorAll('[data-*]'));
-    console.log("Elements with data attributes:", 
-        dataElements.map(el => ({
-            tag: el.tagName,
-            dataAttrs: Array.from(el.attributes)
-                .filter(attr => attr.name.startsWith('data-'))
-                .map(attr => `${attr.name}=${attr.value}`)
-        }))
-    );
-    
-    // Look for common app structures
-    const appRoot = document.querySelector('#root, #app, [data-reactroot]');
-    console.log("App root:", appRoot);
-    
-    // Look for React devtools
-    const reactElements = Array.from(document.querySelectorAll('[data-reactid], [data-react-checksum]'));
-    console.log("React elements found:", reactElements.length);
-}
-
-// Modified search function to handle shadow DOM
-function searchShadowDOM(root) {
-    const results = [];
-    
-    function searchNode(node) {
-        // Check if node has shadow root
-        if (node.shadowRoot) {
-            console.log("Found shadow root:", node);
-            searchNode(node.shadowRoot);
-        }
-        
-        // Search regular children
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                searchNode(child);
+// Function to find text content that looks like a highlight
+function findHighlightContent() {
+    // Walk through all nodes in the document
+    const walker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+        {
+            acceptNode: function(node) {
+                const text = node.textContent.trim();
+                if (text.length > 20 && node.parentElement) {
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+                return NodeFilter.FILTER_SKIP;
             }
         }
-        
-        // Check text content
-        if (node.textContent && node.textContent.trim().length > 20) {
-            results.push({
-                element: node,
-                text: node.textContent.trim()
-            });
-        }
+    );
+
+    let textNodes = [];
+    let node;
+    while (node = walker.nextNode()) {
+        textNodes.push({
+            text: node.textContent,
+            element: node.parentElement
+        });
     }
-    
-    searchNode(root);
-    return results;
+    return textNodes;
 }
 
-// Run analysis on page load and when content changes
-window.addEventListener('load', analyzePageStructure);
+function performSearch() {
+    const searchTerm = document.getElementById('dt-search-input').value.toLowerCase();
+    console.log("Searching for:", searchTerm);
+    
+    const textNodes = findHighlightContent();
+    console.log("Found text nodes:", textNodes);
+    
+    let matchCount = 0;
+    
+    // Clear previous highlights
+    document.querySelectorAll('.dt-highlight-match').forEach(el => {
+        el.classList.remove('dt-highlight-match');
+        el.style.backgroundColor = '';
+    });
+    
+    // Search and highlight matches
+    textNodes.forEach(({text, element}) => {
+        if (text.toLowerCase().includes(searchTerm)) {
+            console.log("Found match:", text);
+            element.classList.add('dt-highlight-match');
+            element.style.backgroundColor = 'yellow';
+            matchCount++;
+            
+            // Also highlight any parent cards/containers
+            let parent = element.parentElement;
+            for (let i = 0; i < 3; i++) {
+                if (parent) {
+                    parent.classList.add('dt-highlight-match');
+                    parent = parent.parentElement;
+                }
+            }
+        }
+    });
+    
+    document.getElementById('dt-search-count').textContent = `${matchCount} matches`;
+}
 
-// Observe DOM changes
-const observer = new MutationObserver((mutations) => {
-    console.log("DOM changed, reanalyzing...");
-    analyzePageStructure();
+function createSearchUI() {
+    const container = document.createElement('div');
+    container.id = 'dt-search-container';
+    
+    const searchInput = document.createElement('input');
+    searchInput.id = 'dt-search-input';
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search highlights...';
+    
+    const countLabel = document.createElement('span');
+    countLabel.id = 'dt-search-count';
+    
+    const closeButton = document.createElement('button');
+    closeButton.textContent = '×';
+    closeButton.onclick = closeSearch;
+    
+    container.appendChild(searchInput);
+    container.appendChild(countLabel);
+    container.appendChild(closeButton);
+    document.body.appendChild(container);
+    
+    searchInput.addEventListener('input', performSearch);
+}
+
+function initializeSearch() {
+    if (!document.getElementById('dt-search-container')) {
+        createSearchUI();
+    }
+    document.getElementById('dt-search-input').focus();
+}
+
+function closeSearch() {
+    const container = document.getElementById('dt-search-container');
+    if (container) {
+        container.remove();
+    }
+    
+    document.querySelectorAll('.dt-highlight-match').forEach(el => {
+        el.classList.remove('dt-highlight-match');
+        el.style.backgroundColor = '';
+    });
+}
+
+// Add styles
+const style = document.createElement('style');
+style.textContent = `
+    .dt-highlight-match {
+        background-color: rgba(255, 255, 0, 0.3) !important;
+        border: 2px solid #FFD700 !important;
+        border-radius: 4px !important;
+    }
+`;
+document.head.appendChild(style);
+
+// Single event listener for Ctrl+F
+document.addEventListener('keydown', function(e) {
+    console.log("Key pressed:", e.key);
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        console.log("Ctrl+F detected!");
+        e.preventDefault();
+        initializeSearch();
+    }
 });
-
-observer.observe(document.body, {
-    childList: true,
-    subtree: true
-});
-
-// The rest of your search UI code remains the same...

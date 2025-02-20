@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Dovetail Highlight Search",
+  "version": "1.0",
+  "description": "Adds text search functionality to Dovetail highlight boards",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://pedel-lab-uofu.dovetail.com/*"
+      ],
+      "css": ["styles.css"],
+      "js": ["content.js"]
+    }
+  ]
+}
